@@ -86,6 +86,7 @@ async fn main() {
         Commands::KeyEncode(args) => commands::run_key_encode(args),
         Commands::KeyDecode(args) => commands::run_key_decode(args),
         Commands::DiffReports(args) => commands::run_diff_reports(args),
+        Commands::ExportKeys(args) => commands::run_export_keys(args),
         Commands::DiffNetworks(args) => commands::run_diff_networks(args).await,
         Commands::Doctor(args) => commands::doctor::run_doctor(args).await,
         Commands::Watch(args) => commands::watch::run_watch(*args).await,

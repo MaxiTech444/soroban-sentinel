@@ -64,6 +64,9 @@ pub enum Commands {
     /// Compare two saved JSON TTL reports without using RPC
     DiffReports(DiffReportsArgs),
 
+    /// Export the monitored keys in a saved JSON TTL report as sentinel.toml or JSON
+    ExportKeys(ExportKeysArgs),
+
     /// Compare a contract's storage health across two Stellar networks
     DiffNetworks(DiffNetworksArgs),
 
@@ -211,6 +214,18 @@ pub struct DiffReportsArgs {
     /// Return exit code 2 when a risk regression or removal is found
     #[arg(long)]
     pub fail_on_regression: bool,
+}
+
+/// Command-line arguments for `sentinel export-keys`.
+#[derive(Args, Debug, Clone)]
+pub struct ExportKeysArgs {
+    /// Saved JSON TTL report (from `sentinel scan --format json`)
+    #[arg(long, value_name = "REPORT_JSON")]
+    pub input: std::path::PathBuf,
+
+    /// Output format
+    #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]
+    pub format: String,
 }
 
 /// Command-line arguments for `sentinel diff-networks`.
