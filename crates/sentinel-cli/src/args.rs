@@ -67,6 +67,9 @@ pub enum Commands {
     /// Export the monitored keys in a saved JSON TTL report as sentinel.toml or JSON
     ExportKeys(ExportKeysArgs),
 
+    /// Decode a base64 LedgerEntry, LedgerEntryData, or LedgerKey XDR value
+    Explain(ExplainArgs),
+
     /// Compare a contract's storage health across two Stellar networks
     DiffNetworks(DiffNetworksArgs),
 
@@ -225,6 +228,26 @@ pub struct ExportKeysArgs {
 
     /// Output format
     #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]
+    pub format: String,
+}
+
+/// Command-line arguments for `sentinel explain`.
+#[derive(Args, Debug, Clone)]
+pub struct ExplainArgs {
+    /// Base64 XDR for a LedgerEntry, LedgerEntryData, or LedgerKey
+    #[arg(
+        value_name = "BASE64_XDR",
+        required_unless_present = "stdin",
+        conflicts_with = "stdin"
+    )]
+    pub xdr: Option<String>,
+
+    /// Read the base64 XDR from standard input
+    #[arg(long)]
+    pub stdin: bool,
+
+    /// Output format
+    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
     pub format: String,
 }
 
