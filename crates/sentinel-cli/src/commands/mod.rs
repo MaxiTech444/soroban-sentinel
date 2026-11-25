@@ -10,12 +10,15 @@ pub mod diff_networks;
 pub mod explain;
 pub mod export_keys;
 pub mod forecast;
+pub mod generate_docker;
 pub mod init;
+pub mod key_diff;
 pub mod keys;
 pub mod network;
 pub mod restore;
 pub mod scan;
 pub mod service;
+pub mod trace_route;
 #[cfg(feature = "tui")]
 pub mod tui;
 
@@ -29,7 +32,9 @@ pub use diff_networks::run_diff_networks;
 pub use explain::run_explain;
 pub use export_keys::run_export_keys;
 pub use forecast::run_forecast;
+pub use generate_docker::run_generate_docker;
 pub use init::run_init;
+pub use key_diff::run_key_diff;
 pub use keys::{run_key_decode, run_key_encode};
 pub use network::run_network;
 pub use restore::run_restore;
@@ -44,3 +49,5 @@ pub use service::run_install_service;
 
 pub mod top_consumers;
 pub use top_consumers::run_top_consumers;
+pub mod trend;
+pub use trend::run_trend;

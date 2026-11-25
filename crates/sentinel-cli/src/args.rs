@@ -29,6 +29,8 @@ pub enum Commands {
     TopConsumers(TopConsumersArgs),
     /// Check Soroban RPC connectivity, network identity, and protocol support
     Doctor(DoctorArgs),
+    /// Measure the connection and response latency of a Soroban RPC endpoint
+    TraceRoute(TraceRouteArgs),
     /// Monitor one contract and notify configured incident providers
     Watch(Box<WatchArgs>),
 
@@ -55,6 +57,9 @@ pub enum Commands {
     /// Generate a sentinel.toml fleet manifest
     Init(InitArgs),
 
+    /// Generate Docker deployment files
+    GenerateDocker(GenerateDockerArgs),
+
     /// Encode a Soroban storage key expression as XDR
     KeyEncode(KeyEncodeArgs),
 
@@ -73,11 +78,37 @@ pub enum Commands {
     /// Compare a contract's storage health across two Stellar networks
     DiffNetworks(DiffNetworksArgs),
 
+    /// Compare storage keys between two saved scan reports
+    KeyDiff(KeyDiffArgs),
+
     /// Estimate the fee for extending a contract footprint TTL
     Forecast(ForecastArgs),
 
     /// Display network state-archival and contract entry limits
     Network(NetworkArgs),
+
+    /// Analyze historical scan snapshots to project TTL decay and threshold crossings
+    Trend(TrendArgs),
+}
+
+/// Command-line arguments for `sentinel generate-docker`.
+#[derive(Args, Debug, Clone)]
+pub struct GenerateDockerArgs {
+    /// Directory where Docker deployment files are written
+    #[arg(long = "out-dir", default_value = ".", value_name = "PATH")]
+    pub out_dir: std::path::PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct TraceRouteArgs {
+    #[arg(long, value_name = "URL")]
+    pub rpc_url: String,
+    /// Emit timing measurements as JSON
+    #[arg(long)]
+    pub json: bool,
+    /// Disable ANSI color codes in terminal output
+    #[arg(long)]
+    pub no_color: bool,
 }
 
 #[derive(Args, Debug)]
@@ -86,6 +117,9 @@ pub struct DoctorArgs {
     pub rpc_url: Option<String>,
     #[arg(long, default_value = "testnet", value_name = "NETWORK")]
     pub network: String,
+    /// Disable ANSI color codes in text output (also honored via the NO_COLOR environment variable)
+    #[arg(long = "no-color")]
+    pub no_color: bool,
 }
 
 // Avoid Debug implementations that print provider credentials.
@@ -100,6 +134,26 @@ pub struct WatchArgs {
     pub pagerduty_routing_key: Option<String>,
     #[arg(long, env = "OPSGENIE_API_KEY", hide_env_values = true)]
     pub opsgenie_api_key: Option<String>,
+    /// Datadog API key for metrics and events submission
+    #[arg(
+        long,
+        env = "DATADOG_API_KEY",
+        hide_env_values = true,
+        value_name = "KEY"
+    )]
+    pub datadog_api_key: Option<String>,
+    /// Datadog intake site: "datadoghq.com" (US, default) or "datadoghq.eu" (EU)
+    #[arg(long, default_value = "datadoghq.com", value_name = "SITE",
+          value_parser = ["datadoghq.com", "datadoghq.eu"])]
+    pub datadog_site: String,
+    /// Microsoft Teams incoming webhook URL for Adaptive Card alerts
+    #[arg(
+        long = "alert-teams",
+        env = "TEAMS_WEBHOOK_URL",
+        hide_env_values = true,
+        value_name = "WEBHOOK_URL"
+    )]
+    pub alert_teams: Option<String>,
 }
 
 impl std::fmt::Debug for WatchArgs {
@@ -249,6 +303,21 @@ pub struct ExplainArgs {
     /// Output format
     #[arg(long, default_value = "text", value_parser = ["text", "json"])]
     pub format: String,
+/// Arguments for `sentinel key-diff`.
+#[derive(Args, Debug, Clone)]
+pub struct KeyDiffArgs {
+    /// Earlier scan report
+    #[arg(long, value_name = "SCAN_A.json")]
+    pub before: std::path::PathBuf,
+    /// Later scan report
+    #[arg(long, value_name = "SCAN_B.json")]
+    pub after: std::path::PathBuf,
+    /// Output format
+    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+    pub format: String,
+    /// Disable ANSI color codes in text output
+    #[arg(long = "no-color")]
+    pub no_color: bool,
 }
 
 /// Command-line arguments for `sentinel diff-networks`.
@@ -314,9 +383,13 @@ pub struct ScanArgs {
     #[arg(long, default_value = "testnet", value_name = "NETWORK")]
     pub network: String,
 
-    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), "csv" (flat tabular export), "parquet" (binary columnar export, requires the `parquet` Cargo feature), or "sarif" (GitHub Code Scanning)
+    /// Output format for scan results: "text" (colorized ASCII table), "json" (machine-readable), "ndjson" (line-delimited JSON per storage entry), "csv" (flat tabular export), "parquet" (binary columnar export, requires the `parquet` Cargo feature), "sarif" (GitHub Code Scanning), or "markdown"
     #[arg(long, default_value = "text", value_name = "FORMAT")]
     pub format: String,
+
+    /// Disable ANSI color codes in text output (also honored via the NO_COLOR environment variable)
+    #[arg(long = "no-color")]
+    pub no_color: bool,
 
     /// Write report output to a file instead of stdout (existing files are overwritten)
     #[arg(long, value_name = "PATH")]
@@ -544,6 +617,10 @@ pub struct CheckArgs {
     /// Report format
     #[arg(long, default_value = "text", value_parser = ["text", "json"])]
     pub format: String,
+
+    /// Disable ANSI color codes in text output (also honored via the NO_COLOR environment variable)
+    #[arg(long = "no-color")]
+    pub no_color: bool,
 }
 
 /// Shared selection for read-only contract entry inspection.
@@ -704,6 +781,30 @@ pub struct InstallServiceArgs {
     pub output_dir: Option<std::path::PathBuf>,
 }
 
+/// Command-line arguments for `sentinel trend`.
+#[derive(Args, Debug, Clone)]
+pub struct TrendArgs {
+    /// Directory containing historical JSON scan reports
+    #[arg(long = "input-dir", value_name = "DIR")]
+    pub input_dir: std::path::PathBuf,
+
+    /// Optional contract ID filter (required when input directory contains multiple contracts)
+    #[arg(long, value_name = "ID")]
+    pub contract: Option<String>,
+
+    /// Warning threshold in ledgers for projecting threshold crossings
+    #[arg(long, default_value_t = 120960, value_name = "LEDGERS")]
+    pub warning_threshold: u32,
+
+    /// Critical threshold in ledgers for projecting threshold crossings
+    #[arg(long, value_name = "LEDGERS")]
+    pub critical_threshold: Option<u32>,
+
+    /// Output format: "text" (ASCII table) or "json"
+    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+    pub format: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -724,6 +825,7 @@ mod tests {
                 );
                 assert_eq!(scan.network, "testnet");
                 assert_eq!(scan.format, "text");
+                assert!(!scan.no_color);
                 assert!(scan.output.is_none());
                 assert_eq!(scan.threshold, 120960);
                 assert!(scan.rpc_url.is_none());
@@ -754,7 +856,8 @@ mod tests {
             "--network",
             "mainnet",
             "--format",
-            "json",
+            "ndjson",
+            "--no-color",
             "--output",
             "report.csv",
             "--threshold",
@@ -797,7 +900,8 @@ mod tests {
                     Some("https://soroban-testnet.stellar.org")
                 );
                 assert_eq!(scan.network, "mainnet");
-                assert_eq!(scan.format, "json");
+                assert_eq!(scan.format, "ndjson");
+                assert!(scan.no_color);
                 assert_eq!(scan.output.as_deref(), Some("report.csv"));
                 assert_eq!(scan.threshold, 50000);
                 assert_eq!(scan.key, vec!["COUNTER", "ADMIN"]);
@@ -864,6 +968,47 @@ mod tests {
                 assert_eq!(restore.format, "json");
             }
             _ => panic!("expected restore command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_trend_defaults_and_flags() {
+        let defaults = Cli::parse_from(["sentinel", "trend", "--input-dir", "./scans"]);
+        match defaults.command {
+            Commands::Trend(trend) => {
+                assert_eq!(trend.input_dir, std::path::PathBuf::from("./scans"));
+                assert!(trend.contract.is_none());
+                assert_eq!(trend.warning_threshold, 120960);
+                assert!(trend.critical_threshold.is_none());
+                assert_eq!(trend.format, "text");
+            }
+            _ => panic!("expected trend command"),
+        }
+
+        let contract = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM";
+        let custom = Cli::parse_from([
+            "sentinel",
+            "trend",
+            "--input-dir",
+            "/tmp/history",
+            "--contract",
+            contract,
+            "--warning-threshold",
+            "100000",
+            "--critical-threshold",
+            "25000",
+            "--format",
+            "json",
+        ]);
+        match custom.command {
+            Commands::Trend(trend) => {
+                assert_eq!(trend.input_dir, std::path::PathBuf::from("/tmp/history"));
+                assert_eq!(trend.contract.as_deref(), Some(contract));
+                assert_eq!(trend.warning_threshold, 100000);
+                assert_eq!(trend.critical_threshold, Some(25000));
+                assert_eq!(trend.format, "json");
+            }
+            _ => panic!("expected trend command"),
         }
     }
 }
